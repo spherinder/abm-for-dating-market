@@ -6,7 +6,7 @@ from .models.simulation import Simulation
 
 
 def main():
-    agent_num_male = 5
+    agent_num_male = 10
     agent_num_female = 5
 
     # --- 1) CREATE AGENTS ---

@@ -13,7 +13,7 @@ class Simulation:
         self.agents = agents
         self.matching_model = matchmaking_model
         self.T = T # rounds of simulation
-        self.D = np.zeros((len(agents), len(agents)))  # dating matrix history
+        self.D = np.zeros((len(agents), len(agents)))  # dating matrix history (can be simplified by addressing gender)
 
     def run(self):
         for t in range(self.T):
