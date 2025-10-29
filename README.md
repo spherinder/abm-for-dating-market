@@ -9,8 +9,10 @@ To install the necessary dependencies, run the following command:
 ### Usage
 To run the simulation, execute the following command:
 
-*Linux*
+*Linux:*
+
 ```python3 -m src.run_simulation```
 
-*Windows*
+*Windows:*
+
 ```py -m src.run_simulation```
