@@ -1,8 +1,8 @@
 import random
 from typing import Protocol
-from base import *
+from .base import *
 
-class SimpleMatchmakingModel(MatchmakingModel):
+class RandomUniformMatching(MatchmakingModel):
     def match(self, agents: list[Agent]) -> list[tuple[Agent, Agent]]:
         """A simple matchmaking strategy that pairs agents sequentially."""
         agents_copy = agents[:]

@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
-from agents.base import Agent
-from matchmaking.base import MatchmakingModel
+from ..agents.base import Agent
+from ..matchmaking.base import MatchmakingModel
 
 class Simulation:
     def __init__(
@@ -22,10 +22,13 @@ class Simulation:
             for agent_i, agent_j in pairs:
                 if agent_i.decide_match(agent_j) and agent_j.decide_match(agent_i):
                     # they date
-                    agent_i.s = agent_j.s = "Dating"
+                    agent_i.d= agent_j.d = True
                     self.D[agent_i.id, agent_j.id] = self.D[agent_j.id, agent_i.id] = 1
                 else:
                     # rejected – optionally update willingness or u drift
+                    agent_i.handle_rejection(agent_j)
+                    agent_j.handle_rejection(agent_i)
+                    agent_i.d = agent_j.d = False
                     pass
 
             # Here later: update willingness u, track exclusion, log state

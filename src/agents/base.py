@@ -6,13 +6,15 @@ WILLINGNESS = Optional[float]  # willingness to date (0.0 to 1.0)
 
 @dataclass
 class Agent:
+    id: int = None  # unique identifier
     a: Any | None = None # own attribute
     u: Any | None = None # sought attribute
     g: GENDER = None # gender 
     w: WILLINGNESS = None # willingness to date (0.0 to 1.0)
     d: bool = False # is dating
     e: bool = False # is excluded from dating
-    def __init__(self, a: Any | None = None, u: Any | None = None, g: GENDER = "M", w: WILLINGNESS = None, d: bool = False, e: bool = False) -> None:
+    def __init__(self, id: int, a: Any | None = None, u: Any | None = None, g: GENDER = "M", w: WILLINGNESS = None, d: bool = False, e: bool = False) -> None:
+        self.id = id
         self.a = a # own attribute
         self.u = u # sought attribute
         self.g = g # gender
@@ -21,7 +23,12 @@ class Agent:
         self.e = e # is excluded from dating
 
     def decide_match(self, other: "Agent") -> bool:
+        """Decide whether to match with another agent"""
         raise NotImplementedError("Subclasses should implement this method.")
+    
+    def handle_rejection(self, other: "Agent") -> None:
+        """Handle rejection from another agent"""
+        raise NotImplementedError("Subclasses should implement this method if needed.")
 
     def update(self, a: Any = None, s: Any = None, gender: GENDER = "M", w: float | None= None) -> None:
         """Update attributes a and/or s (only non-None values are applied)."""
