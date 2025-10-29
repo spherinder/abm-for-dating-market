@@ -1,0 +1,5 @@
+# pycache
+src/__pycache__
+src/agents/__pycache__
+src/matchmaking/__pycache__
+src/models/__pycache__
