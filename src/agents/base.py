@@ -6,14 +6,14 @@ WILLINGNESS = Optional[float]  # willingness to date (0.0 to 1.0)
 
 @dataclass
 class Agent:
-    id: int = None  # unique identifier
-    a: Any | None = None # own attribute
-    u: Any | None = None # sought attribute
-    g: GENDER = None # gender 
-    w: WILLINGNESS = None # willingness to date (0.0 to 1.0)
-    d: bool = False # is dating
-    e: bool = False # is excluded from dating
-    def __init__(self, id: int, a: Any | None = None, u: Any | None = None, g: GENDER = "M", w: WILLINGNESS = None, d: bool = False, e: bool = False) -> None:
+    id: int = 0  # unique identifier
+    a: Any = 0  # own attribute
+    u: Any = 0  # sought attribute
+    g: GENDER = None  # gender
+    w: WILLINGNESS = None  # willingness to date (0.0 to 1.0)
+    d: bool = False  # is dating
+    e: bool = False  # is excluded from dating
+    def __init__(self, id: int, a: Any = 0, u: Any = 0, g: GENDER = "M", w: WILLINGNESS = 0.0, d: bool = False, e: bool = False) -> None:
         self.id = id
         self.a = a # own attribute
         self.u = u # sought attribute

@@ -2,12 +2,13 @@ import random
 from .base import *
 
 class SimpleAgent(Agent):
-    a: int = None # own attribute
-    u: int = None # sought attribute
-    ua_threshold: float | None = None # acceptance threshold
-    w_threshold: float | None = None # threshold for willingness to date
-    w_decrease_multiplier: int | None = None # multiplier to decrease willingness on rejection
-    def __init__(self, id: int, a: int = 1, u: int = 1, gender: GENDER = "M", w: WILLINGNESS = 1.0, d: bool = False, e: bool = False) -> None:
+    a: int = 0 # own attribute
+    u: int = 0 # sought attribute
+    ua_threshold: float = 0.0 # acceptance threshold
+    w_threshold: float = 0.0 # threshold for willingness to date
+    w_decrease_multiplier: int = 1 # multiplier to decrease willingness on rejection
+
+    def __init__(self, id: int, a: int = random.randint(0, 50), u: int = random.randint(0, 50), gender: GENDER = "M", w: WILLINGNESS = 1.0, d: bool = False, e: bool = False) -> None:
         super().__init__(id, a, u, gender, w, d, e)
         self.ua_threshold =  random.uniform(0.0, 10.0)  # random acceptance threshold between 0 and 10
         self.w_threshold = random.uniform(0.0, 1)  # random willingness threshold between 0 and 1
