@@ -1,22 +1,31 @@
 # src/run_simulation.py
 
+import random
+
+import numpy as np
 from .agents.simple import SimpleAgent
 from .matchmaking.random_uniform import RandomUniformMatching
 from .models.simulation import Simulation
 
 
 def main():
-    agent_num_male = 10
-    agent_num_female = 5
+    agent_num_male = 50
+    agent_num_female = 50
 
     # --- 1) CREATE AGENTS ---
     agents = []
     agent_id = 0
     for i in range(agent_num_male):
-        agents.append(SimpleAgent(id=agent_id, a=i, u=5, gender="M"))
+        agent_a = random.randint(0, 10)
+        agent_u = random.randint(0, 10)
+        agent_male = SimpleAgent(id=agent_id, a=agent_a, u=agent_u, gender="M")
+        agents.append(agent_male)
         agent_id += 1
     for i in range(agent_num_female):
-        agents.append(SimpleAgent(id=agent_id, a=i, u=5, gender="F"))
+        agent_a = random.randint(0, 10)
+        agent_u = random.randint(0, 10)
+        agent_female = SimpleAgent(id=agent_id, a=agent_a, u=agent_u, gender="F")
+        agents.append(agent_female)
         agent_id += 1
 
     # --- 2) PICK MATCHMAKING MODEL ---
@@ -26,15 +35,14 @@ def main():
     sim = Simulation(
         agents=agents,
         matchmaking_model=matchmaking_model,
-        T=20
+        T=100
     )
 
     # --- 4) RUN IT ---
     D = sim.run()
 
     # --- 5) DEMO OUTPUT ---
-    print("Final dating matrix D:")
-    print(D)
+    print(f"Out of {len(agents)} agents, {np.sum(D)/2} were matched.")
 
 
 if __name__ == "__main__":
