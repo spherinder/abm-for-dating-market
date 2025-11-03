@@ -44,5 +44,15 @@ class Agent:
         """Return a dictionary representation of the agent."""
         return {"a": self.a, "s": self.u, "g": self.g, "w": self.w}
 
+    def __hash__(self) -> int:
+        """Make Agent hashable so it can be used as a dictionary key."""
+        return hash((self.a, self.u, self.g))
+    
+    def __eq__(self, other) -> bool:
+        """Define equality for Agent instances."""
+        if not isinstance(other, Agent):
+            return False
+        return (self.a, self.u, self.g) == (other.a, other.u, other.g)
+    
     def __repr__(self) -> str:
         return f"Agent(a={self.a!r}, s={self.u!r}, g={self.g!r}, w={self.w!r})"

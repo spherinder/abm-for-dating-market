@@ -2,6 +2,7 @@ from typing import List
 import numpy as np
 from ..agents.base import Agent
 from ..matchmaking.base import MatchmakingModel
+from ..dating_graph.dating_graph import DatingGraph
 
 class Simulation:
     def __init__(
@@ -11,13 +12,15 @@ class Simulation:
         T: int = 50,
     ):
         self.agents = agents
+        self.agent_graph = DatingGraph()
+        self.agent_graph.from_agents(agents)
         self.matching_model = matchmaking_model
         self.T = T # rounds of simulation
         self.D = np.zeros((len(agents), len(agents)))  # dating matrix history (can be simplified by addressing gender)
 
     def run(self):
         for t in range(self.T):
-            pairs: list[tuple[Agent, Agent]] = self.matching_model.match(self.agents)
+            pairs: list[tuple[Agent, Agent]] = self.matching_model.match(self.agent_graph)
 
             for agent_i, agent_j in pairs:
                 if agent_i.decide_match(agent_j) and agent_j.decide_match(agent_i):
