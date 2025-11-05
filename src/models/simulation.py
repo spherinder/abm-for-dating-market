@@ -1,14 +1,14 @@
 from typing import List
 import numpy as np
 from ..agents.base import Agent
-from ..matchmaking.base import MatchmakingModel
+from ..pairing.base import PairingModel
 from ..dating_graph.dating_graph import DatingGraph
 
 class Simulation:
     def __init__(
         self,
         agents: List[Agent],
-        matchmaking_model: MatchmakingModel,
+        matchmaking_model: PairingModel,
         T: int = 50,
     ):
         self.agents = agents

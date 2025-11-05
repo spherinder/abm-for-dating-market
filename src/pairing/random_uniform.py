@@ -2,7 +2,7 @@ import random
 from typing import Protocol
 from .base import *
 
-class RandomUniformMatching(MatchmakingModel):
+class RandomUniformPairing(PairingModel):
     def match(self, agents: DatingGraph) -> list[tuple[Agent, Agent]]:
         """A simple matchmaking strategy that pairs agents sequentially."""
         agents.complete_graph()

@@ -4,7 +4,7 @@ import random
 
 import numpy as np
 from .agents.simple import SimpleAgent
-from .matchmaking.random_uniform import RandomUniformMatching
+from .pairing.random_uniform import RandomUniformPairing
 from .models.simulation import Simulation
 
 
@@ -29,7 +29,7 @@ def main():
         agent_id += 1
 
     # --- 2) PICK MATCHMAKING MODEL ---
-    matchmaking_model = RandomUniformMatching()
+    matchmaking_model = RandomUniformPairing()
 
     # --- 3) BUILD SIMULATION ENGINE ---
     sim = Simulation(
