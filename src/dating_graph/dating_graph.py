@@ -38,5 +38,12 @@ class DatingGraph:
         for person in self.graph:
             connections = self.get_connections(person)
             for other in self.graph:
-                if other != person and other not in connections:
+                if other != person and other not in connections and person.g != other.g:
+                    self.add_connection(person, other)
+
+    def random_uniform_edges(self, probability: float):
+        import random
+        for person in self.graph:
+            for other in self.graph:
+                if other != person and random.random() < probability and person.g != other.g:
                     self.add_connection(person, other)
