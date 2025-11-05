@@ -7,6 +7,12 @@ class DatingGraph:
     def add_person(self, person: Agent):
         if person not in self.graph:
             self.graph[person] = set()
+    
+    def remove_person(self, person: Agent):
+        if person in self.graph:
+            del self.graph[person]
+        for connections in self.graph.values():
+            connections.discard(person)
 
     def add_connection(self, person1: Agent, person2: Agent):
         self.add_person(person1)

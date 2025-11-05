@@ -26,6 +26,8 @@ class Simulation:
                 if agent_i.decide_match(agent_j) and agent_j.decide_match(agent_i):
                     # they date
                     agent_i.d= agent_j.d = True
+                    self.agent_graph.remove_person(agent_i)
+                    self.agent_graph.remove_person(agent_j)
                     self.D[agent_i.id, agent_j.id] = self.D[agent_j.id, agent_i.id] = 1
                 else:
                     # rejected – optionally update willingness or u drift
