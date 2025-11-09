@@ -13,7 +13,8 @@ class Agent:
     w: WILLINGNESS = None  # willingness to date (0.0 to 1.0)
     d: bool = False  # is dating
     e: bool = False  # is excluded from dating
-    def __init__(self, id: int, a: Any = 0, u: Any = 0, g: GENDER = "M", w: WILLINGNESS = 0.0, d: bool = False, e: bool = False) -> None:
+    pop: int = 0 # popularity (nr of connections in the graph)
+    def __init__(self, id: int, a: Any = 0, u: Any = 0, g: GENDER = "M", w: WILLINGNESS = 0.0, d: bool = False, e: bool = False, pop: int = 0) -> None:
         self.id = id
         self.a = a # own attribute
         self.u = u # sought attribute
@@ -21,6 +22,7 @@ class Agent:
         self.w = w # willingness to date (0.0 to 1.0)
         self.d = d # is dating
         self.e = e # is excluded from dating
+        self.pop = pop
 
     def decide_match(self, other: "Agent") -> bool:
         """Decide whether to match with another agent"""
