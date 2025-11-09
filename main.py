@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from random import Random
 import numpy as np
+import pprint
 
 from dataclasses import dataclass, field
 from typing import Final, override
@@ -18,10 +19,6 @@ class Agent:
     @classmethod
     def new(cls, attr_max: int, rng: Random):
         return cls(rng.randint(0, attr_max), rng.randint(0, attr_max), rng)
-
-    @override
-    def __repr__(self) -> str:
-        return f"Agent(attr={self.attr}, sought={self.sought})"
 
 @dataclass
 class UniformPairer:
@@ -42,15 +39,17 @@ class UniformPairer:
         return zip(maleixs, femixs)
 
 class NetworkPairer:
-    graph: Final[PyGraph[int]] # not necessary to store this
     paths: Final[AllPairsPathMapping]
     rng: Final[Random]
+    graph: Final[PyGraph[int]] # not necessary to store this
+    density: Final[float] # not necessary to store this
 
     def __init__(self, n_agents: int, density: float, rng: Random):
         seed = rng.randint(0, 2**32 - 1)
         self.graph = undirected_gnp_random_graph(n_agents, density, seed)
         self.paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
         self.rng = rng
+        self.density = density
 
     def pair_up(self, males: SortedSet[int], fems: SortedSet[int]) -> Iterable[tuple[int,int]]:
         num_m = len(males)
@@ -70,6 +69,13 @@ class NetworkPairer:
 
         perm = gumbel_weighted_permutation(weights)
         return zip(maleixs, (femixs[int(i)] for i in perm))
+
+    def pretty_print(self, agents: list[Agent]) -> str:
+        edges = "\n  ".join(
+            ", ".join(f"{(agents[edge[0]], agents[edge[1]])}" for edge in self.graph.edge_list()[i:i+2])
+            for i in range(0, len(self.graph.edge_list()), 5))
+        return f"NetworkPairer(n_agents={len(self.graph)}, density={self.density}, Edges=[\n  {edges}\n])"
+
 
 
 @dataclass
@@ -116,6 +122,15 @@ class Simulation:
                 elif not f_accepts:
                     self.rejects(a_f,a_m)
 
+    @override
+    def __repr__(self) -> str:
+        males = "\n    ".join(f"{self.agents[a]}" for a in self.males)
+        fems = "\n    ".join(f"{self.agents[a]}" for a in self.fems)
+        couples = "\n    ".join((f"{(self.agents[m],self.agents[f])}" for m,f in self.couples))
+        return (f"Simulation(attr_max={self.attr_max}, affection_malleability={self.affection_malleability}, T={self.T},"
+           f"\n  males=[\n    {males}\n  ],\n  females=[\n    {fems}\n  ],\n  couples=[\n    {couples}\n  ]\n)"
+           )
+
 def main():
     SEED = 42
     rng = Random(SEED)
@@ -131,11 +146,11 @@ def main():
     )
 
     print("initial state")
-    import pprint
     pprint.pprint(sim)
 
-    pairer = UniformPairer(rng)
-    # pairer = NetworkPairer(N*2, 0.2, rng)
+    # pairer = UniformPairer(rng)
+    pairer = NetworkPairer(N*2, 0.2, rng)
+    print(pairer.pretty_print(agents))
     sim.run(pairer)
 
     print(f"got result")
