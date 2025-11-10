@@ -179,6 +179,8 @@ class MutNetSimulation:
         malleability: float, rng: Random, attr_max: int = 50
     ):
         seed = rng.randint(0, 2**32 - 1)
+        # Replace this with other graph generators
+        # Read: https://www.rustworkx.org/api/random_graph_generator_functions.html
         self.graph = undirected_gnp_random_graph(num_m+num_f, density, seed)
 
         self.males = [Agent.new(attr_max, rng) for _ in range(num_m)]
