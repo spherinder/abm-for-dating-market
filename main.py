@@ -191,25 +191,24 @@ class MutNetSimulation:
 
     def accept_prob(self, a_i: Agent, a_j: Agent) -> float:
         # return (self.attr_max - abs(a_i.sought - a_j.attr)) / self.attr_max
-        return exp(-abs(a_i.sought - a_j.attr))
+        return exp(-0.5*abs(a_i.sought - a_j.attr))
 
     def couple(self, mi: int, fi: int):
-        # if not self.graph.has_edge(mi, len(self.males) + fi):
-        #     _ = self.graph.add_edge(mi, len(self.males) + fi, None)
+        if not self.graph.has_edge(mi, len(self.males) + fi):
+            _ = self.graph.add_edge(mi, len(self.males) + fi, None)
         m = self.males[mi]
         f = self.fems[fi]
-        m.sought += self.malleability/(f.attr - m.sought)
-        f.sought += self.malleability * (m.attr - f.sought)
+        m.sought += self.malleability * (1 if m.sought < f.attr else -1)
+        f.sought += self.malleability * (1 if f.sought < m.attr else -1)
 
     def rejects(self, a_i: Agent, a_j: Agent):
-        pass
-        a_j.sought += 2*self.malleability * (1 if a_j.sought < a_i.attr else -1)
+        a_j.sought += self.malleability * (1 if a_j.sought > a_i.attr else -1)
         if a_j.sought < 0:
             a_j.sought = 0
         if a_j.sought > self.attr_max:
             a_j.sought = self.attr_max
 
-    def step(self):
+    def step(self, log: bool = False):
         paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
         num_m = len(self.males)
         pairs = pair_up(range(num_m), range(num_m, num_m + len(self.fems)), paths, self.rngs)
@@ -219,10 +218,10 @@ class MutNetSimulation:
             a_f = self.fems[fi]
             m_accepts = self.rngs[0].random() < self.accept_prob(a_m, a_f)
             f_accepts = self.rngs[0].random() < self.accept_prob(a_f, a_m)
-            # print(f"[{m_accepts} {mi} {fi} {f_accepts}]: {self.males[mi]} | {self.fems[fi]}")
+            if log: print(f"[{m_accepts} {mi} {fi} {f_accepts}]: {self.males[mi]} | {self.fems[fi]}")
             if m_accepts and f_accepts:
                 self.couple(mi, fi)
-                # print(f"coupled {self.males[mi]} | {self.fems[fi]}, nedges {len(self.graph.edge_list())}")
+                if log: print(f"coupled {self.males[mi]} | {self.fems[fi]}, nedges {len(self.graph.edge_list())}")
             # elif self.graph.has_edge(mi, len(self.males)+fi):
             #     self.graph.remove_edge(mi, len(self.males)+fi)
             if not m_accepts:
@@ -267,12 +266,12 @@ def format_graph_edges(g: PyGraph, n: int):
     )
 
 def run_mut_net_sim():
-    SEED = 43
+    SEED = 42
     T = 100
     rng = Random(SEED)
 
     N = 3
-    sim = MutNetSimulation(N, N, 0.3, 0.05, rng, 10)
+    sim = MutNetSimulation(N, N, 0.5, 0.1, rng, 10)
 
     print("initial state")
     pprint.pprint(sim)
@@ -280,7 +279,7 @@ def run_mut_net_sim():
     print("graph", format_graph_edges(sim.graph, N))
 
     for _ in range(T):
-        sim.step()
+        sim.step(log=True)
 
     print(f"got result")
     pprint.pprint(sim)
@@ -288,7 +287,7 @@ def run_mut_net_sim():
     print("graph", format_graph_edges(sim.graph, N))
 
 def run_mut_net_sim_viz():
-    SEED = 43
+    SEED = 42
     T = 100
     rng = Random(SEED)
 
