@@ -1,23 +1,21 @@
 from collections.abc import Iterable, Sequence
-from math import exp
-from random import Random, uniform
+from math import exp, floor
+from random import Random
 import numpy as np
 import pprint
 import datetime
 
 from dataclasses import dataclass, field
 from typing import Final, TypeAlias, override
-from rustworkx.generators import complete_graph, directed_complete_graph
 from rustworkx.visualization import mpl_draw
-from sortedcontainers import SortedSet
 from rustworkx import (
     AllPairsPathMapping,
     PyDiGraph,
     PyGraph,
     all_pairs_dijkstra_shortest_paths,
     circular_layout,
-    spring_layout,
     undirected_gnp_random_graph,
+    barabasi_albert_graph,
 )
 
 from src.utils import gumbel_weighted_permutation
@@ -39,27 +37,6 @@ class Agent:
     @classmethod
     def new(cls, attr_max: int, rng: Random):
         return cls(rng.randint(0, attr_max), rng.randint(0, attr_max), rng)
-
-
-@dataclass
-class UniformPairer:
-    rng: Random = field(repr=False)
-
-    def pair_up(
-        self, males: SortedSet[int], fems: SortedSet[int]
-    ) -> Iterable[tuple[int, int]]:
-        num_m = len(males)
-        num_f = len(fems)
-        maleixs = list(range(num_m))
-        femixs = list(range(num_f))
-
-        if num_m > num_f:
-            maleixs = self.rng.sample(maleixs, num_f)
-        elif num_m < num_f:
-            femixs = self.rng.sample(femixs, num_m)
-
-        self.rng.shuffle(femixs)
-        return zip(maleixs, femixs)
 
 
 def pair_up(
@@ -86,118 +63,6 @@ def pair_up(
     return zip(maleixs, (femixs[int(i)] for i in perm))
 
 
-class NetworkPairer:
-    paths: Final[AllPairsPathMapping]
-    rngs: Rngs
-    graph: Final[PyGraph[int]]  # not necessary to store this
-    density: Final[float]  # not necessary to store this
-
-    def __init__(self, n_agents: int, density: float, rngs: Rngs):
-        seed = rngs[0].randint(0, 2**32 - 1)
-        self.graph = undirected_gnp_random_graph(n_agents, density, seed)
-        self.paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
-        self.rngs = rngs
-        self.density = density
-
-    def pair_up(
-        self, males: Sequence[int], fems: Sequence[int]
-    ) -> Iterable[tuple[int, int]]:
-        return pair_up(males, fems, self.paths, self.rngs)
-
-    def pretty_print(self, agents: list[Agent]) -> str:
-        edges = "\n  ".join(
-            ", ".join(
-                f"{(agents[edge[0]], agents[edge[1]])}"
-                for edge in self.graph.edge_list()[i : i + 2]
-            )
-            for i in range(0, len(self.graph.edge_list()), 5)
-        )
-        return f"NetworkPairer(n_agents={len(self.graph)}, density={self.density}, Edges=[\n  {edges}\n])"
-
-
-class Simulation:
-    agents: Final[list[Agent]]
-    males: SortedSet[int]
-    fems: SortedSet[int]
-    couples: list[tuple[int, int]]
-    attr_max: Final[int]
-    rounds: Final[int]
-    malleability: Final[float]  # ∈ [0,1]
-    rngs: Rngs
-
-    def __init__(
-        self,
-        males: Iterable[Agent],
-        fems: Iterable[Agent],
-        rounds: int,
-        malleability: float,
-        rng: Random,
-        attr_max: int = 50,
-    ):
-        seed = rng.randint(0, 2**32 - 1)
-        self.rngs = (rng, np.random.default_rng(seed))
-
-        self.agents = list(males)
-        num_m = len(self.agents)
-        self.agents.extend(fems)
-        self.males = SortedSet(range(num_m))
-        self.fems = SortedSet(range(num_m, len(self.agents)))
-
-        self.couples = []
-        self.malleability = malleability
-        self.attr_max = attr_max
-        self.rounds = rounds
-
-    def accept_prob(self, a_i: Agent, a_j: Agent) -> float:
-        return (self.attr_max - abs(a_i.sought - a_j.attr)) / self.attr_max
-
-    def rejects(self, a_i: Agent, a_j: Agent):
-        a_j.sought += self.malleability * (a_j.sought - a_i.attr)  # TODO
-        if a_j.sought < 0:
-            a_j.sought = 0
-        if a_j.sought > self.attr_max:
-            a_j.sought = self.attr_max
-
-    def couple(self, m: int, f: int):
-        self.males.remove(m)
-        self.fems.remove(f)
-        self.couples.append((m, f))
-
-    def run(self, pairer: UniformPairer | NetworkPairer):
-        for _ in range(self.rounds):
-            if len(self.males) == 0 or len(self.fems) == 0:
-                print(f"no more {"males" if len(self.males) == 0 else "females"}")
-                break
-            pairs = [
-                (self.males[mi], self.fems[fi])
-                for mi, fi in pairer.pair_up(self.males, self.fems)
-            ]
-
-            for male, fem in pairs:
-                a_m = self.agents[male]
-                a_f = self.agents[fem]
-                m_accepts = self.rngs[0].random() < self.accept_prob(a_m, a_f)
-                f_accepts = self.rngs[0].random() < self.accept_prob(a_f, a_m)
-                if m_accepts and f_accepts:
-                    self.couple(male, fem)
-                elif not m_accepts:
-                    self.rejects(a_m, a_f)
-                elif not f_accepts:
-                    self.rejects(a_f, a_m)
-
-    @override
-    def __repr__(self) -> str:
-        males = "\n    ".join(f"{self.agents[a]}" for a in self.males)
-        fems = "\n    ".join(f"{self.agents[a]}" for a in self.fems)
-        couples = "\n    ".join(
-            (f"{(self.agents[m],self.agents[f])}" for m, f in self.couples)
-        )
-        return (
-            f"Simulation(attr_max={self.attr_max}, malleability={self.malleability}, rounds={self.rounds},"
-            f"\n  males=[\n    {males}\n  ],\n  females=[\n    {fems}\n  ],\n  couples=[\n    {couples}\n  ]\n)"
-        )
-
-
 class MutNetSimulation:
     graph: PyGraph[int]
     density: Final[float]
@@ -207,6 +72,7 @@ class MutNetSimulation:
     malleability: Final[float]  # ∈ [0,1]
     rngs: Rngs
     noise: float
+    sim_sensitivity: float
 
     def __init__(
         self,
@@ -216,12 +82,19 @@ class MutNetSimulation:
         malleability: float,
         rng: Random,
         noise: float,
+        sim_sensitivity: float,
         attr_max: int = 50,
     ):
         seed = rng.randint(0, 2**32 - 1)
         # Replace this with other graph generators
         # Read: https://www.rustworkx.org/api/random_graph_generator_functions.html
-        self.graph = undirected_gnp_random_graph(num_m + num_f, density, seed)
+        graphs = {
+            "uniform": undirected_gnp_random_graph(num_m + num_f, density, seed),
+            "barabasi": barabasi_albert_graph(
+                num_m + num_f, floor((num_m + num_f) * density), seed
+            ),
+        }
+        self.graph = graphs["barabasi"]
 
         self.males = [Agent.new(attr_max, rng) for _ in range(num_m)]
         self.fems = [Agent.new(attr_max, rng) for _ in range(num_f)]
@@ -230,11 +103,12 @@ class MutNetSimulation:
         self.density = density
         self.malleability = malleability
         self.noise = noise
+        self.sim_sensitivity = sim_sensitivity
         self.attr_max = attr_max
 
     def accept_prob(self, a_i: Agent, a_j: Agent) -> float:
         # return (self.attr_max - abs(a_i.sought - a_j.attr)) / self.attr_max
-        return exp(-0.5 * abs(a_i.sought - a_j.attr))
+        return exp(-self.sim_sensitivity * abs(a_i.sought - a_j.attr))
 
     def couple(self, mi: int, fi: int):
         # if not self.graph.has_edge(mi, len(self.males) + fi):
@@ -286,18 +160,15 @@ class MutNetSimulation:
         if self.rngs[0].random() < self.noise:
             a = rng.randint(0, len(self.males) + len(self.fems) - 1)
             b = rng.randint(0, len(self.males) + len(self.fems) - 1)
-            if a != b:
+            if a != b and not self.graph.has_edge(a, b):
                 self.graph.add_edge(a, b, None)
 
         # Deleting edges
         if self.rngs[0].random() < self.noise:
             a = rng.randint(0, len(self.males) + len(self.fems))
             b = rng.randint(0, len(self.males) + len(self.fems))
-            if a != b:
-                try:
-                    self.graph.remove_edge(a, b)
-                except:
-                    pass
+            if a != b and self.graph.has_edge(a, b):
+                self.graph.remove_edge(a, b)
 
     @override
     def __repr__(self) -> str:
@@ -309,54 +180,11 @@ class MutNetSimulation:
         )
 
 
-def run_static_net_sim():
-    SEED = 42
-    rng = Random(SEED)
-
-    N = 10  # agents per gender
-    males = (Agent.new(50, rng) for _ in range(N))
-    fems = (Agent.new(50, rng) for _ in range(N))
-    sim = Simulation(males, fems, 20, 0.1, rng)
-
-    print("initial state")
-    pprint.pprint(sim)
-
-    # pairer = UniformPairer(rng)
-    pairer = NetworkPairer(N * 2, 0.2, sim.rngs)
-    print(pairer.pretty_print(sim.agents))
-    sim.run(pairer)
-
-    print(f"got result")
-    pprint.pprint(sim)
-
-
 def format_graph_edges(g: PyGraph, n: int):
     return ", ".join(
         f"({"F"+str(v1-n) if v1 > n else "M"+str(v1)},{"F"+str(v2-n) if v2 > n else "M"+str(v2)})"
         for v1, v2 in g.edge_list()
     )
-
-
-def run_mut_net_sim():
-    SEED = 42
-    T = 100
-    rng = Random(SEED)
-
-    N = 3
-    sim = MutNetSimulation(N, N, 0.5, 0.1, rng, 10)
-
-    print("initial state")
-    pprint.pprint(sim)
-
-    print("graph", format_graph_edges(sim.graph, N))
-
-    for _ in range(T):
-        sim.step(log=True)
-
-    print(f"got result")
-    pprint.pprint(sim)
-
-    print("graph", format_graph_edges(sim.graph, N))
 
 
 def run_mut_net_sim_viz():
@@ -366,8 +194,9 @@ def run_mut_net_sim_viz():
     density = 0.5
     noise = 0.1
     malleability = 0.1
+    sim_sensitivity = 0.5
 
-    N = 3
+    N = 8
     sim = MutNetSimulation(
         num_m=N,
         num_f=N,
@@ -375,6 +204,7 @@ def run_mut_net_sim_viz():
         malleability=malleability,
         rng=rng,
         noise=noise,
+        sim_sensitivity=sim_sensitivity,
         attr_max=10,
     )
     pos = circular_layout(sim.graph)
@@ -435,7 +265,7 @@ def run_mut_net_sim_viz():
             node_color=colors,
             node_size=500,
             font_color="black",
-            width=[4 * p for p in attraction_graph.edges()],
+            width=[2 * p**6 for p in attraction_graph.edges()],
             # arrow_size=[int(10*p) for p in attraction_graph.edges()],
             edge_color="red",
             edge_cmap=cividis,
