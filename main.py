@@ -206,6 +206,7 @@ class MutNetSimulation:
     attr_max: Final[int]
     malleability: Final[float]  # ∈ [0,1]
     rngs: Rngs
+    noise: float
 
     def __init__(
         self,
@@ -214,6 +215,7 @@ class MutNetSimulation:
         density: float,
         malleability: float,
         rng: Random,
+        noise: float,
         attr_max: int = 50,
     ):
         seed = rng.randint(0, 2**32 - 1)
@@ -227,6 +229,7 @@ class MutNetSimulation:
         self.rngs = (rng, np.random.default_rng(seed))
         self.density = density
         self.malleability = malleability
+        self.noise = noise
         self.attr_max = attr_max
 
     def accept_prob(self, a_i: Agent, a_j: Agent) -> float:
@@ -234,8 +237,8 @@ class MutNetSimulation:
         return exp(-0.5 * abs(a_i.sought - a_j.attr))
 
     def couple(self, mi: int, fi: int):
-        if not self.graph.has_edge(mi, len(self.males) + fi):
-            _ = self.graph.add_edge(mi, len(self.males) + fi, None)
+        # if not self.graph.has_edge(mi, len(self.males) + fi):
+        #     _ = self.graph.add_edge(mi, len(self.males) + fi, None)
         m = self.males[mi]
         f = self.fems[fi]
         m.sought += self.malleability * (1 if m.sought < f.attr else -1)
@@ -276,6 +279,25 @@ class MutNetSimulation:
                 self.rejects(a_m, a_f)
             if not f_accepts:
                 self.rejects(a_f, a_m)
+
+    def create_noise(self):
+        rng = self.rngs[0]
+        # Adding edges
+        if self.rngs[0].random() < self.noise:
+            a = rng.randint(0, len(self.males) + len(self.fems) - 1)
+            b = rng.randint(0, len(self.males) + len(self.fems) - 1)
+            if a != b:
+                self.graph.add_edge(a, b, None)
+
+        # Deleting edges
+        if self.rngs[0].random() < self.noise:
+            a = rng.randint(0, len(self.males) + len(self.fems))
+            b = rng.randint(0, len(self.males) + len(self.fems))
+            if a != b:
+                try:
+                    self.graph.remove_edge(a, b)
+                except:
+                    pass
 
     @override
     def __repr__(self) -> str:
@@ -339,11 +361,22 @@ def run_mut_net_sim():
 
 def run_mut_net_sim_viz():
     SEED = 42
-    T = 100
     rng = Random(SEED)
+    T = 200
+    density = 0.5
+    noise = 0.1
+    malleability = 0.1
 
     N = 3
-    sim = MutNetSimulation(N, N, 0.5, 0.1, rng, 10)
+    sim = MutNetSimulation(
+        num_m=N,
+        num_f=N,
+        density=density,
+        malleability=malleability,
+        rng=rng,
+        noise=noise,
+        attr_max=10,
+    )
     pos = circular_layout(sim.graph)
 
     pprint.pprint(sim)
@@ -362,6 +395,7 @@ def run_mut_net_sim_viz():
         ax.clear()
 
         print("step frame", frame)
+        sim.create_noise()
         sim.step()
 
         # edge_widths = [data['weight'] for data in sim.graph.edges()]
