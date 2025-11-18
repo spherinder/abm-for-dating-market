@@ -83,6 +83,7 @@ class MutNetSimulation:
         rng: Random,
         noise: float,
         sim_sensitivity: float,
+        graph_type: str,
         attr_max: int = 50,
     ):
         seed = rng.randint(0, 2**32 - 1)
@@ -94,7 +95,7 @@ class MutNetSimulation:
                 num_m + num_f, floor((num_m + num_f) * density), seed
             ),
         }
-        self.graph = graphs["barabasi"]
+        self.graph = graphs[graph_type]
 
         self.males = [Agent.new(attr_max, rng) for _ in range(num_m)]
         self.fems = [Agent.new(attr_max, rng) for _ in range(num_f)]
@@ -125,7 +126,7 @@ class MutNetSimulation:
         if a_j.sought > self.attr_max:
             a_j.sought = self.attr_max
 
-    def step(self, log: bool = False):
+    def step_local(self, log: bool = False):
         paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
         num_m = len(self.males)
         pairs = pair_up(
@@ -153,6 +154,10 @@ class MutNetSimulation:
                 self.rejects(a_m, a_f)
             if not f_accepts:
                 self.rejects(a_f, a_m)
+
+    # do this for only 1 pair -> need to do N times more to balance out
+    def step_filter(self, num_attr: int):
+        pass
 
     def create_noise(self):
         rng = self.rngs[0]
@@ -188,29 +193,34 @@ def format_graph_edges(g: PyGraph, n: int):
 
 
 def run_mut_net_sim_viz():
+    # Defining initial values
     SEED = 42
     rng = Random(SEED)
     T = 200
-    density = 0.5
+    density = 0.2
     noise = 0.1
     malleability = 0.1
     sim_sensitivity = 0.5
+    graph_type = "barabasi"
+    N = 4
 
-    N = 8
+    # Creating social graph (underlying structure)
     sim = MutNetSimulation(
         num_m=N,
-        num_f=N,
+        num_f=2 * N,
         density=density,
         malleability=malleability,
         rng=rng,
         noise=noise,
         sim_sensitivity=sim_sensitivity,
+        graph_type=graph_type,  # "uniform" or "barabasi"
         attr_max=10,
     )
     pos = circular_layout(sim.graph)
 
     pprint.pprint(sim)
 
+    # Creating attraction graph
     attraction_graph: PyDiGraph[None, float] = PyDiGraph()
     _ = attraction_graph.add_nodes_from(None for _ in range(N + N))
     _ = attraction_graph.add_edges_from(
@@ -226,7 +236,7 @@ def run_mut_net_sim_viz():
 
         print("step frame", frame)
         sim.create_noise()
-        sim.step()
+        sim.step_local()
 
         # edge_widths = [data['weight'] for data in sim.graph.edges()]
 
@@ -280,7 +290,7 @@ def run_mut_net_sim_viz():
     ani.save(
         f"asset/graph_{now}.mp4", writer="ffmpeg"
     )  # pyright: ignore[reportUnknownMemberType]
-    print(f"saved mp4 graph_{now}.mp4 successfully")
+    print(f"Saved mp4 {graph_type}_graph_{now}.mp4 successfully")
 
 
 def main():
