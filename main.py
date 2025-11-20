@@ -234,7 +234,7 @@ def run_mut_net_sim_viz():
             sim.graph,
             pos,
             ax=ax,
-            with_labels=True,
+            # with_labels=True,
             alpha=0.6,
             # width=edge_widths,
             # edge_color=edge_widths,
@@ -243,6 +243,9 @@ def run_mut_net_sim_viz():
             edge_vmax=3,
         )
 
+        for i in range(N):
+            attraction_graph[i] = (sim.males[i].attr, sim.males[i].sought)
+            attraction_graph[i+N] = (sim.fems[i].attr, sim.fems[i].sought)
         for mi in range(N):
             for fi in range(N):
                 attraction_graph.update_edge(
@@ -262,6 +265,7 @@ def run_mut_net_sim_viz():
             pos=pos,
             ax=ax,
             with_labels=True,
+            labels=lambda node: f"a:{node[0]:.0f}, s:{node[1]:.1f}",
             node_color=colors,
             node_size=500,
             font_color="black",
