@@ -90,12 +90,14 @@ class MutNetSimulation:
         # Replace this with other graph generators
         # Read: https://www.rustworkx.org/api/random_graph_generator_functions.html
         graphs = {
-            "uniform": undirected_gnp_random_graph(num_m + num_f, density, seed),
-            "barabasi": barabasi_albert_graph(
+            "uniform": lambda: undirected_gnp_random_graph(
+                num_m + num_f, density, seed
+            ),
+            "barabasi": lambda: barabasi_albert_graph(
                 num_m + num_f, floor((num_m + num_f) * density), seed
             ),
         }
-        self.graph = graphs[graph_type]
+        self.graph = graphs[graph_type]()
 
         self.males = [Agent.new(attr_max, rng) for _ in range(num_m)]
         self.fems = [Agent.new(attr_max, rng) for _ in range(num_f)]
@@ -249,7 +251,7 @@ def run_mut_net_sim_viz():
             sim.graph,
             pos,
             ax=ax,
-            with_labels=True,
+            # with_labels=True,
             alpha=0.6,
             # width=edge_widths,
             # edge_color=edge_widths,
@@ -258,6 +260,9 @@ def run_mut_net_sim_viz():
             edge_vmax=3,
         )
 
+        for i in range(N):
+            attraction_graph[i] = (sim.males[i].attr, sim.males[i].sought)
+            attraction_graph[i + N] = (sim.fems[i].attr, sim.fems[i].sought)
         for mi in range(N):
             for fi in range(N):
                 attraction_graph.update_edge(
@@ -277,6 +282,7 @@ def run_mut_net_sim_viz():
             pos=pos,
             ax=ax,
             with_labels=True,
+            labels=lambda node: f"a:{node[0]:.0f}, s:{node[1]:.1f}",
             node_color=colors,
             node_size=500,
             font_color="black",
