@@ -163,17 +163,21 @@ class MutNetSimulation:
         rng = self.rngs[0]
         # Adding edges
         if self.rngs[0].random() < self.noise:
-            a = rng.randint(0, len(self.males) + len(self.fems) - 1)
-            b = rng.randint(0, len(self.males) + len(self.fems) - 1)
-            if a != b and not self.graph.has_edge(a, b):
-                self.graph.add_edge(a, b, None)
+            while True:
+                a = rng.randint(0, len(self.males) + len(self.fems) - 1)
+                b = rng.randint(0, len(self.males) + len(self.fems) - 1)
+                if a != b and not self.graph.has_edge(a, b):
+                    self.graph.add_edge(a, b, None)
+                    break
 
         # Deleting edges
         if self.rngs[0].random() < self.noise:
-            a = rng.randint(0, len(self.males) + len(self.fems))
-            b = rng.randint(0, len(self.males) + len(self.fems))
-            if a != b and self.graph.has_edge(a, b):
-                self.graph.remove_edge(a, b)
+            while True:
+                a = rng.randint(0, len(self.males) + len(self.fems))
+                b = rng.randint(0, len(self.males) + len(self.fems))
+                if a != b and self.graph.has_edge(a, b):
+                    self.graph.remove_edge(a, b)
+                    break
 
     @override
     def __repr__(self) -> str:
@@ -194,20 +198,21 @@ def format_graph_edges(g: PyGraph, n: int):
 
 def run_mut_net_sim_viz():
     # Defining initial values
-    SEED = 42
+    # SEED = 42
+    SEED = 166
     rng = Random(SEED)
     T = 200
-    density = 0.2
-    noise = 0.1
+    density = 0.1
+    noise = 0.01
     malleability = 0.1
     sim_sensitivity = 0.5
     graph_type = "barabasi"
-    N = 4
+    N = 6
 
     # Creating social graph (underlying structure)
     sim = MutNetSimulation(
         num_m=N,
-        num_f=2 * N,
+        num_f=3 * N,
         density=density,
         malleability=malleability,
         rng=rng,
@@ -288,7 +293,7 @@ def run_mut_net_sim_viz():
     ani = animation.FuncAnimation(fig, update, frames=T, interval=400)
     now = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     ani.save(
-        f"asset/graph_{now}.mp4", writer="ffmpeg"
+        f"asset/{graph_type}_graph_{now}.mp4", writer="ffmpeg"
     )  # pyright: ignore[reportUnknownMemberType]
     print(f"Saved mp4 {graph_type}_graph_{now}.mp4 successfully")
 
