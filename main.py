@@ -89,12 +89,12 @@ class MutNetSimulation:
         # Replace this with other graph generators
         # Read: https://www.rustworkx.org/api/random_graph_generator_functions.html
         graphs = {
-            "uniform": undirected_gnp_random_graph(num_m + num_f, density, seed),
-            "barabasi": barabasi_albert_graph(
+            "uniform": lambda: undirected_gnp_random_graph(num_m + num_f, density, seed),
+            "barabasi": lambda: barabasi_albert_graph(
                 num_m + num_f, floor((num_m + num_f) * density), seed
             ),
         }
-        self.graph = graphs["barabasi"]
+        self.graph = graphs["barabasi"]()
 
         self.males = [Agent.new(attr_max, rng) for _ in range(num_m)]
         self.fems = [Agent.new(attr_max, rng) for _ in range(num_f)]
@@ -161,7 +161,7 @@ class MutNetSimulation:
             a = rng.randint(0, len(self.males) + len(self.fems) - 1)
             b = rng.randint(0, len(self.males) + len(self.fems) - 1)
             if a != b and not self.graph.has_edge(a, b):
-                self.graph.add_edge(a, b, None)
+                _ = self.graph.add_edge(a, b, None)
 
         # Deleting edges
         if self.rngs[0].random() < self.noise:
