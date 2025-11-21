@@ -209,12 +209,14 @@ def run_mut_net_sim_viz():
     malleability = 0.1
     sim_sensitivity = 0.5
     graph_type = "barabasi"
-    N = 6
+    # NOTE: indices go from males -> females --- offset females by N_m
+    N_m = 6
+    N_f = 3 * N_m
 
     # Creating social graph (underlying structure)
     sim = MutNetSimulation(
-        num_m=N,
-        num_f=3 * N,
+        num_m=N_m,
+        num_f=N_f,
         density=density,
         malleability=malleability,
         rng=rng,
@@ -229,12 +231,12 @@ def run_mut_net_sim_viz():
 
     # Creating attraction graph
     attraction_graph: PyDiGraph[None, float] = PyDiGraph()
-    _ = attraction_graph.add_nodes_from(None for _ in range(N + N))
+    _ = attraction_graph.add_nodes_from(None for _ in range(N_m + N_f))
     _ = attraction_graph.add_edges_from(
         e
-        for mi in range(N)
-        for fi in range(N)
-        for e in [(mi, fi + N, 0), (fi + N, mi, 0)]
+        for mi in range(N_m)
+        for fi in range(N_f)
+        for e in [(mi, fi + N_m, 0), (fi + N_m, mi, 0)]
     )
     fig, ax = plt.subplots(figsize=(8, 8))
 
@@ -260,20 +262,21 @@ def run_mut_net_sim_viz():
             edge_vmax=3,
         )
 
-        for i in range(N):
+        for i in range(N_m):
             attraction_graph[i] = (sim.males[i].attr, sim.males[i].sought)
-            attraction_graph[i + N] = (sim.fems[i].attr, sim.fems[i].sought)
-        for mi in range(N):
-            for fi in range(N):
+        for i in range(N_f):
+            attraction_graph[i + N_m] = (sim.fems[i].attr, sim.fems[i].sought)
+        for mi in range(N_m):
+            for fi in range(N_f):
                 attraction_graph.update_edge(
-                    mi, fi + N, sim.accept_prob(sim.males[mi], sim.fems[fi])
+                    mi, fi + N_m, sim.accept_prob(sim.males[mi], sim.fems[fi])
                 )
                 attraction_graph.update_edge(
-                    fi + N, mi, sim.accept_prob(sim.fems[fi], sim.males[mi])
+                    fi + N_m, mi, sim.accept_prob(sim.fems[fi], sim.males[mi])
                 )
 
-        colors = ["skyblue" for _ in range(N)]
-        colors.extend("pink" for _ in range(N))
+        colors = ["skyblue" for _ in range(N_m)]
+        colors.extend("pink" for _ in range(N_f))
 
         # print("edges", attraction_graph.edges())
 
