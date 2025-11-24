@@ -307,10 +307,88 @@ def run_mut_net_sim_viz():
     print(f"Saved mp4 {graph_type}_graph_{now}.mp4 successfully")
 
 
+def run_mut_net_sim():
+    # Defining initial values
+    # SEED = 42
+    SEED = 166
+    rng = Random(SEED)
+    T = 200
+    density = 0.1
+    noise = 0.01
+    malleability = 0.1
+    sim_sensitivity = 0.5
+    graph_type = "barabasi"
+    # NOTE: indices go from males -> females --- offset females by N_m
+    N_m = 6
+    N_f = 3 * N_m
+
+    # Creating social graph (underlying structure)
+    sim = MutNetSimulation(
+        num_m=N_m,
+        num_f=N_f,
+        density=density,
+        malleability=malleability,
+        rng=rng,
+        noise=noise,
+        sim_sensitivity=sim_sensitivity,
+        graph_type=graph_type,  # "uniform" or "barabasi"
+        attr_max=10,
+    )
+
+    pprint.pprint(sim)
+
+    # Creating attraction graph
+    attraction_graph: PyDiGraph[None, float] = PyDiGraph()
+    _ = attraction_graph.add_nodes_from(None for _ in range(N_m + N_f))
+    _ = attraction_graph.add_edges_from(
+        e
+        for mi in range(N_m)
+        for fi in range(N_f)
+        for e in [(mi, fi + N_m, 0), (fi + N_m, mi, 0)]
+    )
+
+    # mainloop -> for step by step info do something inside this loop
+    for _ in range(T):
+        sim.create_noise()
+        sim.step_local()
+
+        # edge_widths = [data['weight'] for data in sim.graph.edges()]
+
+        for i in range(N_m):
+            attraction_graph[i] = (sim.males[i].attr, sim.males[i].sought)
+        for i in range(N_f):
+            attraction_graph[i + N_m] = (sim.fems[i].attr, sim.fems[i].sought)
+        for mi in range(N_m):
+            for fi in range(N_f):
+                attraction_graph.update_edge(
+                    mi, fi + N_m, sim.accept_prob(sim.males[mi], sim.fems[fi])
+                )
+                attraction_graph.update_edge(
+                    fi + N_m, mi, sim.accept_prob(sim.fems[fi], sim.males[mi])
+                )
+
+        colors = ["skyblue" for _ in range(N_m)]
+        colors.extend("pink" for _ in range(N_f))
+
+        # print("edges", attraction_graph.edges())
+
+    return sim
+
+
 def main():
-    # run_static_net_sim()
-    # run_mut_net_sim()
-    run_mut_net_sim_viz()
+    generate = False
+
+    if generate:
+        run_mut_net_sim_viz()
+        return
+
+    sim = run_mut_net_sim()
+    print("Males attributes and soughts")
+    for i in range(len(sim.males)):
+        print(f"{i}: {sim.males[i]}")
+    print("Females attributes and soughts")
+    for i in range(len(sim.fems)):
+        print(f"{i}: {sim.fems[i]}")
 
 
 if __name__ == "__main__":
