@@ -6,7 +6,7 @@ import pprint
 import datetime
 
 from dataclasses import dataclass, field
-from typing import Final, TypeAlias, override
+from typing import Final, Literal, Self, TypeAlias, TypeVar, override
 from rustworkx.visualization import mpl_draw
 from rustworkx import (
     AllPairsPathMapping,
@@ -23,20 +23,19 @@ import matplotlib.pyplot as plt
 from matplotlib.cm import Blues, cividis
 import matplotlib.animation as animation
 
-
 Rngs: TypeAlias = tuple[Random, np.random.Generator]
-
+T = TypeVar("T", bound=np.generic)
+Vec: TypeAlias = np.ndarray[tuple[int], np.dtype[T]]
 
 @dataclass
 class Agent:
-    # Mostly change this
-    attr: Final[float]
-    sought: float
-    rng: Random = field(repr=False)
+    attr: Final[Vec[np.integer]]
+    sought: Vec[np.floating]
+    rng: np.random.Generator = field(repr=False) # (don't print)
 
     @classmethod
-    def new(cls, attr_max: int, rng: Random):
-        return cls(rng.randint(0, attr_max), rng.randint(0, attr_max), rng)
+    def new(cls, attr_dim: int, attr_max: int, rng: np.random.Generator) -> Self:
+        return cls(rng.integers(0, attr_max, (attr_dim,)), rng.uniform(0, attr_max, (attr_dim,)), rng)
 
 
 def pair_up(
@@ -73,6 +72,8 @@ class MutNetSimulation:
     rngs: Rngs
     noise: float
     sim_sensitivity: float
+    attr_dim: Final[int]
+    graph_type: Literal["barabasi", "uniform"]
 
     def __init__(
         self,
@@ -83,50 +84,53 @@ class MutNetSimulation:
         rng: Random,
         noise: float,
         sim_sensitivity: float,
-        graph_type: str,
+        graph_type: Literal["barabasi", "uniform"] = "barabasi",
         attr_max: int = 50,
+        attr_dim: int = 2,
     ):
         seed = rng.randint(0, 2**32 - 1)
+        self.rngs = (rng, np.random.default_rng(seed))
+        self.graph_type = graph_type
         # Replace this with other graph generators
         # Read: https://www.rustworkx.org/api/random_graph_generator_functions.html
-        graphs = {
-            "uniform": lambda: undirected_gnp_random_graph(
-                num_m + num_f, density, seed
-            ),
-            "barabasi": lambda: barabasi_albert_graph(
-                num_m + num_f, floor((num_m + num_f) * density), seed
-            ),
-        }
-        self.graph = graphs[graph_type]()
+        if graph_type == "uniform":
+            self.graph = undirected_gnp_random_graph(num_m + num_f, density, seed)
+        elif graph_type == "barabasi":
+            self.graph = barabasi_albert_graph(num_m + num_f, floor((num_m + num_f) * density), seed)
 
-        self.males = [Agent.new(attr_max, rng) for _ in range(num_m)]
-        self.fems = [Agent.new(attr_max, rng) for _ in range(num_f)]
-
-        self.rngs = (rng, np.random.default_rng(seed))
+        self.males = [Agent.new(attr_dim, attr_max, self.rngs[1]) for _ in range(num_m)]
+        self.fems = [Agent.new(attr_dim, attr_max, self.rngs[1]) for _ in range(num_f)]
         self.density = density
         self.malleability = malleability
         self.noise = noise
         self.sim_sensitivity = sim_sensitivity
         self.attr_max = attr_max
+        self.attr_dim = attr_dim
 
     def accept_prob(self, a_i: Agent, a_j: Agent) -> float:
-        # return (self.attr_max - abs(a_i.sought - a_j.attr)) / self.attr_max
-        return exp(-self.sim_sensitivity * abs(a_i.sought - a_j.attr))
+        return exp(-self.sim_sensitivity * np.linalg.norm(a_i.sought - a_j.attr))
 
     def couple(self, mi: int, fi: int):
         # if not self.graph.has_edge(mi, len(self.males) + fi):
         #     _ = self.graph.add_edge(mi, len(self.males) + fi, None)
         m = self.males[mi]
         f = self.fems[fi]
-        m.sought += self.malleability * (1 if m.sought < f.attr else -1)
-        f.sought += self.malleability * (1 if f.sought < m.attr else -1)
+        self.approach(m,f)
+        self.approach(f,m)
+
+    def approach(self, a_i: Agent, a_j: Agent):
+        diff = a_j.attr - a_i.sought
+        norm2 = np.inner(diff,diff)  # pyright: ignore[reportAny]
+        a_i.sought += diff * min(1.0, self.malleability / (norm2 + 0.01))  # pyright: ignore[reportAny]
 
     def rejects(self, a_i: Agent, a_j: Agent):
-        a_j.sought += self.malleability * (1 if a_j.sought > a_i.attr else -1)
-        if a_j.sought < 0:
-            a_j.sought = 0
-        if a_j.sought > self.attr_max:
-            a_j.sought = self.attr_max
+        pass
+        # diff = a_i.attr - a_j.sought
+        # norm2 = np.inner(diff,diff)  # pyright: ignore[reportAny]
+        # a_j.sought = np.clip(
+        #     a_j.sought + self.malleability * (diff / (norm2 + 0.01)),  # pyright: ignore[reportAny]
+        #     0, self.attr_max
+        # )
 
     def step_local(self, log: bool = False):
         paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
@@ -169,14 +173,14 @@ class MutNetSimulation:
                 a = rng.randint(0, len(self.males) + len(self.fems) - 1)
                 b = rng.randint(0, len(self.males) + len(self.fems) - 1)
                 if a != b and not self.graph.has_edge(a, b):
-                    self.graph.add_edge(a, b, None)
+                    _ = self.graph.add_edge(a, b, None)
                     break
 
         # Deleting edges
         if self.rngs[0].random() < self.noise:
             while True:
-                a = rng.randint(0, len(self.males) + len(self.fems))
-                b = rng.randint(0, len(self.males) + len(self.fems))
+                a = rng.randint(0, len(self.males) + len(self.fems) - 1)
+                b = rng.randint(0, len(self.males) + len(self.fems) - 1)
                 if a != b and self.graph.has_edge(a, b):
                     self.graph.remove_edge(a, b)
                     break
@@ -186,7 +190,7 @@ class MutNetSimulation:
         males = "\n    ".join(f"{a}" for a in self.males)
         fems = "\n    ".join(f"{a}" for a in self.fems)
         return (
-            f"MutNetSimulation(attr_max={self.attr_max}, malleability={self.malleability},"
+            f"{self.__class__.__name__}(attr_max={self.attr_max}, malleability={self.malleability},"
             f"\n  males=[\n    {males}\n  ],\n  females=[\n    {fems}\n  ]\n)"
         )
 
@@ -198,45 +202,28 @@ def format_graph_edges(g: PyGraph, n: int):
     )
 
 
-def run_mut_net_sim_viz():
-    # Defining initial values
-    # SEED = 42
-    SEED = 166
-    rng = Random(SEED)
-    T = 200
-    density = 0.1
-    noise = 0.01
-    malleability = 0.1
-    sim_sensitivity = 0.5
-    graph_type = "barabasi"
-    # NOTE: indices go from males -> females --- offset females by N_m
-    N_m = 6
-    N_f = 3 * N_m
-
-    # Creating social graph (underlying structure)
-    sim = MutNetSimulation(
-        num_m=N_m,
-        num_f=N_f,
-        density=density,
-        malleability=malleability,
-        rng=rng,
-        noise=noise,
-        sim_sensitivity=sim_sensitivity,
-        graph_type=graph_type,  # "uniform" or "barabasi"
-        attr_max=10,
-    )
+def run_mut_net_sim_viz(sim: MutNetSimulation, T: int, live_view=False):
+    if live_view:
+        from matplotlib import use
+        use('TkAgg')
+    N_m = len(sim.males)
+    N_f = len(sim.fems)
     pos = circular_layout(sim.graph)
 
     pprint.pprint(sim)
 
     # Creating attraction graph
-    attraction_graph: PyDiGraph[None, float] = PyDiGraph()
-    _ = attraction_graph.add_nodes_from(None for _ in range(N_m + N_f))
+    attraction_graph: PyDiGraph[tuple[Vec[np.integer], Vec[np.floating]], float] = PyDiGraph()
+    _ = attraction_graph.add_nodes_from((sim.males[i].attr, sim.males[i].sought) for i in range(N_m))
+    _ = attraction_graph.add_nodes_from((sim.fems[i].attr, sim.fems[i].sought) for i in range(N_f))
     _ = attraction_graph.add_edges_from(
         e
         for mi in range(N_m)
         for fi in range(N_f)
-        for e in [(mi, fi + N_m, 0), (fi + N_m, mi, 0)]
+        for e in [
+            (mi, fi + N_m, sim.accept_prob(sim.males[mi], sim.fems[fi])),
+            (fi + N_m, mi, sim.accept_prob(sim.fems[fi], sim.males[mi]))
+        ]
     )
     fig, ax = plt.subplots(figsize=(8, 8))
 
@@ -247,9 +234,7 @@ def run_mut_net_sim_viz():
         sim.create_noise()
         sim.step_local()
 
-        # edge_widths = [data['weight'] for data in sim.graph.edges()]
-
-        mpl_draw(
+        _ = mpl_draw(
             sim.graph,
             pos,
             ax=ax,
@@ -285,7 +270,8 @@ def run_mut_net_sim_viz():
             pos=pos,
             ax=ax,
             with_labels=True,
-            labels=lambda node: f"a:{node[0]:.0f}, s:{node[1]:.1f}",
+            labels=lambda node:
+                f"a:{node[0]}\ns:{np.array2string(node[1], precision=1)}",
             node_color=colors,
             node_size=500,
             font_color="black",
@@ -299,28 +285,37 @@ def run_mut_net_sim_viz():
             f"Time Step: {frame}"
         )  # pyright: ignore[reportUnknownMemberType]
 
-    ani = animation.FuncAnimation(fig, update, frames=T, interval=400)
+    ani = animation.FuncAnimation(fig, update, frames=T, interval=400, repeat=False)
+    if live_view:
+        plt.show()
     now = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
     ani.save(
-        f"asset/{graph_type}_graph_{now}.mp4", writer="ffmpeg"
+        f"asset/{sim.graph_type}_graph_{now}.mp4", writer="ffmpeg"
     )  # pyright: ignore[reportUnknownMemberType]
-    print(f"Saved mp4 {graph_type}_graph_{now}.mp4 successfully")
+    print(f"Saved mp4 {sim.graph_type}_graph_{now}.mp4 successfully")
 
 
-def run_mut_net_sim():
-    # Defining initial values
-    # SEED = 42
+def run_mut_net_sim(sim: MutNetSimulation, T: int):
+    pprint.pprint(sim)
+
+    for _ in range(T):
+        sim.create_noise()
+        sim.step_local()
+    return sim
+
+
+def main():
     SEED = 166
     rng = Random(SEED)
     T = 200
-    density = 0.1
+    density = 0.2
     noise = 0.01
-    malleability = 0.1
-    sim_sensitivity = 0.5
+    malleability = 0.4
+    sim_sensitivity = 0.1
     graph_type = "barabasi"
     # NOTE: indices go from males -> females --- offset females by N_m
-    N_m = 6
-    N_f = 3 * N_m
+    N_m = 4
+    N_f = 2 * N_m
 
     # Creating social graph (underlying structure)
     sim = MutNetSimulation(
@@ -334,55 +329,8 @@ def run_mut_net_sim():
         graph_type=graph_type,  # "uniform" or "barabasi"
         attr_max=10,
     )
-
-    pprint.pprint(sim)
-
-    # Creating attraction graph
-    attraction_graph: PyDiGraph[None, float] = PyDiGraph()
-    _ = attraction_graph.add_nodes_from(None for _ in range(N_m + N_f))
-    _ = attraction_graph.add_edges_from(
-        e
-        for mi in range(N_m)
-        for fi in range(N_f)
-        for e in [(mi, fi + N_m, 0), (fi + N_m, mi, 0)]
-    )
-
-    # mainloop -> for step by step info do something inside this loop
-    for _ in range(T):
-        sim.create_noise()
-        sim.step_local()
-
-        # edge_widths = [data['weight'] for data in sim.graph.edges()]
-
-        for i in range(N_m):
-            attraction_graph[i] = (sim.males[i].attr, sim.males[i].sought)
-        for i in range(N_f):
-            attraction_graph[i + N_m] = (sim.fems[i].attr, sim.fems[i].sought)
-        for mi in range(N_m):
-            for fi in range(N_f):
-                attraction_graph.update_edge(
-                    mi, fi + N_m, sim.accept_prob(sim.males[mi], sim.fems[fi])
-                )
-                attraction_graph.update_edge(
-                    fi + N_m, mi, sim.accept_prob(sim.fems[fi], sim.males[mi])
-                )
-
-        colors = ["skyblue" for _ in range(N_m)]
-        colors.extend("pink" for _ in range(N_f))
-
-        # print("edges", attraction_graph.edges())
-
-    return sim
-
-
-def main():
-    generate = False
-
-    if generate:
-        run_mut_net_sim_viz()
-        return
-
-    sim = run_mut_net_sim()
+    run_mut_net_sim_viz(sim, T, live_view=True)
+    # run_mut_net_sim(sim, T)
     print("Males attributes and soughts")
     for i in range(len(sim.males)):
         print(f"{i}: {sim.males[i]}")
