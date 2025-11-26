@@ -281,11 +281,21 @@ def get_coupling_exclusion(
 
 
 # Use this to get data of all agents to get info *AT that round*
+# Return list of (coupling, exclusion, pop)
 def get_agent_data(sim: MutNetSimulation, t: float) -> list[tuple[int, int, int]]:
     data = []
     for a in range(len(sim.males) + len(sim.fems)):
         data.append(get_coupling_exclusion(sim, a, t)[:3])
     return data
+
+
+def get_correlation_exclusion_popularity(
+    data: list[tuple[int, int, int]],
+) -> np.ndarray:
+    data_np = np.array(data)
+    exclusion_pop_array = data_np[:, [1, 2]]
+
+    return np.corrcoef(exclusion_pop_array, rowvar=False)
 
 
 def run_mut_net_sim_viz(sim: MutNetSimulation, T: int, live_view=False):
@@ -430,14 +440,21 @@ def main():
     print("Females attributes and soughts")
     for i in range(len(sim.fems)):
         print(f"{i}: {sim.fems[i]}")
-    # Data collection example
     """
+        Data Collection Examples
+
         print("deg of coupling & exclusion and convergence")
         print(f"{sim.avg_coupling}")
         print(f"{sim.avg_exclusion}")
         print(f"{sim.convergence}")
+
         print("final agent data")
         print(get_agent_data(sim, 0.5))
+
+        print("correlation")
+        data = get_agent_data(sim, 0.5)
+        corr_matrix = get_correlation_exclusion_popularity(data)
+        print(f"corr: {corr_matrix[0, 1]}")
     """
 
 
