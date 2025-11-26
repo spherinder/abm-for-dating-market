@@ -27,15 +27,20 @@ Rngs: TypeAlias = tuple[Random, np.random.Generator]
 T = TypeVar("T", bound=np.generic)
 Vec: TypeAlias = np.ndarray[tuple[int], np.dtype[T]]
 
+
 @dataclass
 class Agent:
     attr: Final[Vec[np.integer]]
     sought: Vec[np.floating]
-    rng: np.random.Generator = field(repr=False) # (don't print)
+    rng: np.random.Generator = field(repr=False)  # (don't print)
 
     @classmethod
     def new(cls, attr_dim: int, attr_max: int, rng: np.random.Generator) -> Self:
-        return cls(rng.integers(0, attr_max, (attr_dim,)), rng.uniform(0, attr_max, (attr_dim,)), rng)
+        return cls(
+            rng.integers(0, attr_max, (attr_dim,)),
+            rng.uniform(0, attr_max, (attr_dim,)),
+            rng,
+        )
 
 
 def pair_up(
@@ -75,6 +80,11 @@ class MutNetSimulation:
     attr_dim: Final[int]
     graph_type: Literal["barabasi", "uniform"]
 
+    # Data collecting part
+    avg_coupling: list[float]
+    avg_exclusion: list[float]
+    convergence: list[float]  # mean over decision values (accept_prob)
+
     def __init__(
         self,
         num_m: int,
@@ -96,7 +106,9 @@ class MutNetSimulation:
         if graph_type == "uniform":
             self.graph = undirected_gnp_random_graph(num_m + num_f, density, seed)
         elif graph_type == "barabasi":
-            self.graph = barabasi_albert_graph(num_m + num_f, floor((num_m + num_f) * density), seed)
+            self.graph = barabasi_albert_graph(
+                num_m + num_f, floor((num_m + num_f) * density), seed
+            )
 
         self.males = [Agent.new(attr_dim, attr_max, self.rngs[1]) for _ in range(num_m)]
         self.fems = [Agent.new(attr_dim, attr_max, self.rngs[1]) for _ in range(num_f)]
@@ -107,6 +119,10 @@ class MutNetSimulation:
         self.attr_max = attr_max
         self.attr_dim = attr_dim
 
+        self.avg_coupling = []
+        self.avg_exclusion = []
+        self.convergence = []
+
     def accept_prob(self, a_i: Agent, a_j: Agent) -> float:
         return exp(-self.sim_sensitivity * np.linalg.norm(a_i.sought - a_j.attr))
 
@@ -115,13 +131,15 @@ class MutNetSimulation:
         #     _ = self.graph.add_edge(mi, len(self.males) + fi, None)
         m = self.males[mi]
         f = self.fems[fi]
-        self.approach(m,f)
-        self.approach(f,m)
+        self.approach(m, f)
+        self.approach(f, m)
 
     def approach(self, a_i: Agent, a_j: Agent):
         diff = a_j.attr - a_i.sought
-        norm2 = np.inner(diff,diff)  # pyright: ignore[reportAny]
-        a_i.sought += diff * min(1.0, self.malleability / (norm2 + 0.01))  # pyright: ignore[reportAny]
+        norm2 = np.inner(diff, diff)  # pyright: ignore[reportAny]
+        a_i.sought += diff * min(
+            1.0, self.malleability / (norm2 + 0.01)
+        )  # pyright: ignore[reportAny]
 
     def rejects(self, a_i: Agent, a_j: Agent):
         pass
@@ -160,6 +178,24 @@ class MutNetSimulation:
                 self.rejects(a_m, a_f)
             if not f_accepts:
                 self.rejects(a_f, a_m)
+
+        # TODO: calculate avg coupling and exclusion
+        t = 0.5
+        avg_coupling = 0
+        avg_exclusion = 0
+        convergence = 0
+
+        # (coupling, exclusion, pop)
+        for a in range(len(self.males) + len(self.fems)):
+            res = get_coupling_exclusion(self, a, t)
+            avg_coupling += res[0]
+            avg_exclusion += res[1]
+            convergence += res[3]
+        avg_coupling /= len(self.males) + len(self.fems)
+        avg_exclusion /= len(self.males) + len(self.fems)
+        self.avg_coupling.append(avg_coupling)
+        self.avg_exclusion.append(avg_exclusion)
+        self.convergence.append(convergence)
 
     # do this for only 1 pair -> need to do N times more to balance out
     def step_filter(self, num_attr: int):
@@ -202,10 +238,56 @@ def format_graph_edges(g: PyGraph, n: int):
     )
 
 
+# return (coupling, exclusion, convergence, pop)
+def get_coupling_exclusion(
+    sim: MutNetSimulation, a: int, t: float
+) -> tuple[int, int, int, float]:
+    neighbors = sim.graph.neighbors(a)
+    deg = [0, 0, len(neighbors), 0.0]
+    for b in neighbors:
+        # check if same genders
+        if (a < len(sim.males) and b < len(sim.males)) or (
+            a >= len(sim.males) and b >= len(sim.males)
+        ):
+            continue
+
+        if a < len(sim.males):
+            agent_a = sim.males[a]
+            agent_b = sim.fems[b - len(sim.males)]
+        else:
+            agent_a = sim.fems[a - len(sim.males)]
+            agent_b = sim.males[b]
+
+        deg[3] += sim.accept_prob(agent_a, agent_b)
+
+        if (
+            sim.accept_prob(agent_a, agent_b) > t
+            and sim.accept_prob(agent_b, agent_a) > t
+        ):
+            deg[0] += 1
+
+        if (
+            sim.accept_prob(agent_a, agent_b) > t
+            and sim.accept_prob(agent_b, agent_a) <= t
+        ):
+            deg[1] += 1
+
+    return tuple(deg)
+
+
+def get_agent_data(sim: MutNetSimulation, t: float) -> list[tuple[int, int, int]]:
+    data = []
+    for a in range(len(sim.males) + len(sim.fems)):
+        data.append(get_coupling_exclusion(sim, a, t)[:3])
+    return data
+
+
 def run_mut_net_sim_viz(sim: MutNetSimulation, T: int, live_view=False):
     if live_view:
-        from matplotlib import use
-        use('TkAgg')
+        # from matplotlib import use
+
+        # use("TkAgg")
+        pass
     N_m = len(sim.males)
     N_f = len(sim.fems)
     pos = circular_layout(sim.graph)
@@ -213,16 +295,22 @@ def run_mut_net_sim_viz(sim: MutNetSimulation, T: int, live_view=False):
     pprint.pprint(sim)
 
     # Creating attraction graph
-    attraction_graph: PyDiGraph[tuple[Vec[np.integer], Vec[np.floating]], float] = PyDiGraph()
-    _ = attraction_graph.add_nodes_from((sim.males[i].attr, sim.males[i].sought) for i in range(N_m))
-    _ = attraction_graph.add_nodes_from((sim.fems[i].attr, sim.fems[i].sought) for i in range(N_f))
+    attraction_graph: PyDiGraph[tuple[Vec[np.integer], Vec[np.floating]], float] = (
+        PyDiGraph()
+    )
+    _ = attraction_graph.add_nodes_from(
+        (sim.males[i].attr, sim.males[i].sought) for i in range(N_m)
+    )
+    _ = attraction_graph.add_nodes_from(
+        (sim.fems[i].attr, sim.fems[i].sought) for i in range(N_f)
+    )
     _ = attraction_graph.add_edges_from(
         e
         for mi in range(N_m)
         for fi in range(N_f)
         for e in [
             (mi, fi + N_m, sim.accept_prob(sim.males[mi], sim.fems[fi])),
-            (fi + N_m, mi, sim.accept_prob(sim.fems[fi], sim.males[mi]))
+            (fi + N_m, mi, sim.accept_prob(sim.fems[fi], sim.males[mi])),
         ]
     )
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -270,8 +358,7 @@ def run_mut_net_sim_viz(sim: MutNetSimulation, T: int, live_view=False):
             pos=pos,
             ax=ax,
             with_labels=True,
-            labels=lambda node:
-                f"a:{node[0]}\ns:{np.array2string(node[1], precision=1)}",
+            labels=lambda node: f"a:{node[0]}\ns:{np.array2string(node[1], precision=1)}",
             node_color=colors,
             node_size=500,
             font_color="black",
@@ -307,7 +394,7 @@ def run_mut_net_sim(sim: MutNetSimulation, T: int):
 def main():
     SEED = 166
     rng = Random(SEED)
-    T = 200
+    T = 50
     density = 0.2
     noise = 0.01
     malleability = 0.4
@@ -329,14 +416,23 @@ def main():
         graph_type=graph_type,  # "uniform" or "barabasi"
         attr_max=10,
     )
-    run_mut_net_sim_viz(sim, T, live_view=True)
-    # run_mut_net_sim(sim, T)
+    # run_mut_net_sim_viz(sim, T, live_view=False)
+    run_mut_net_sim(sim, T)
     print("Males attributes and soughts")
     for i in range(len(sim.males)):
         print(f"{i}: {sim.males[i]}")
     print("Females attributes and soughts")
     for i in range(len(sim.fems)):
         print(f"{i}: {sim.fems[i]}")
+    # Data collection
+    """
+        print("deg of coupling & exclusion and convergence")
+        print(f"{sim.avg_coupling}")
+        print(f"{sim.avg_exclusion}")
+        print(f"{sim.convergence}")
+        print("final agent data")
+        print(get_agent_data(sim, 0.5))
+    """
 
 
 if __name__ == "__main__":
