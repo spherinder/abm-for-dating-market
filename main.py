@@ -153,9 +153,9 @@ class MutNetSimulation:
     def step_local(self, log: bool = False):
         paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
         num_m = len(self.males)
-        pairs = pair_up(
-            range(num_m), range(num_m, num_m + len(self.fems)), paths, self.rngs
-        )
+        num_f = len(self.fems)
+        num_a = num_m + num_f
+        pairs = pair_up(range(num_m), range(num_m, num_m + num_f), paths, self.rngs)
         pairs = list(pairs)
         for mi, fi in pairs:
             a_m = self.males[mi]
@@ -179,20 +179,21 @@ class MutNetSimulation:
             if not f_accepts:
                 self.rejects(a_f, a_m)
 
-        # TODO: calculate avg coupling and exclusion
-        t = 0.5
+        # Collecting data for this round
+        t = 0.5  # change this as you seem fit -> might wanna define this globally somewhere
         avg_coupling = 0
         avg_exclusion = 0
         convergence = 0
 
-        # (coupling, exclusion, pop)
-        for a in range(len(self.males) + len(self.fems)):
+        # res = (coupling, exclusion, pop, convergence)
+        for a in range(num_a):
             res = get_coupling_exclusion(self, a, t)
             avg_coupling += res[0]
             avg_exclusion += res[1]
             convergence += res[3]
-        avg_coupling /= len(self.males) + len(self.fems)
-        avg_exclusion /= len(self.males) + len(self.fems)
+        avg_coupling /= num_a
+        avg_exclusion /= num_a
+        convergence /= num_a
         self.avg_coupling.append(avg_coupling)
         self.avg_exclusion.append(avg_exclusion)
         self.convergence.append(convergence)
@@ -238,7 +239,7 @@ def format_graph_edges(g: PyGraph, n: int):
     )
 
 
-# return (coupling, exclusion, convergence, pop)
+# Return a tuple of (coupling, exclusion, convergence, pop)
 def get_coupling_exclusion(
     sim: MutNetSimulation, a: int, t: float
 ) -> tuple[int, int, int, float]:
@@ -251,6 +252,7 @@ def get_coupling_exclusion(
         ):
             continue
 
+        # map indices to Agent classes
         if a < len(sim.males):
             agent_a = sim.males[a]
             agent_b = sim.fems[b - len(sim.males)]
@@ -258,14 +260,17 @@ def get_coupling_exclusion(
             agent_a = sim.fems[a - len(sim.males)]
             agent_b = sim.males[b]
 
+        # Q(a, b) to be used to calculate "convergence"
         deg[3] += sim.accept_prob(agent_a, agent_b)
 
+        # deg of coupling
         if (
             sim.accept_prob(agent_a, agent_b) > t
             and sim.accept_prob(agent_b, agent_a) > t
         ):
             deg[0] += 1
 
+        # deg of exclusion
         if (
             sim.accept_prob(agent_a, agent_b) > t
             and sim.accept_prob(agent_b, agent_a) <= t
@@ -275,6 +280,7 @@ def get_coupling_exclusion(
     return tuple(deg)
 
 
+# Use this to get data of all agents to get info *AT that round*
 def get_agent_data(sim: MutNetSimulation, t: float) -> list[tuple[int, int, int]]:
     data = []
     for a in range(len(sim.males) + len(sim.fems)):
@@ -424,7 +430,7 @@ def main():
     print("Females attributes and soughts")
     for i in range(len(sim.fems)):
         print(f"{i}: {sim.fems[i]}")
-    # Data collection
+    # Data collection example
     """
         print("deg of coupling & exclusion and convergence")
         print(f"{sim.avg_coupling}")
