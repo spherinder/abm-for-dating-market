@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pickle
 from random import Random
 from typing import Callable, List, Tuple
 from SALib import ProblemSpec
@@ -186,11 +187,9 @@ def perform_sa():
             [0,1], # mall
             [0, 0.003],  # noise
             [0, 10], # sim sensitivity
-            [10, 500] # T (is floored later!)
+            [10, 100] # T (is floored later!)
         ],
-        'outputs': ['single_pair_nr', 'any_pair_nr', 'coupling_deg', 'excluded_nr', 'excluded_degree', 'conv']
+        'outputs': ['single_pair_nr', 'any_pair_nr', 'coupling_deg', 'excluded_nr', 'excluded_degree', 'conv', 'pop_corr_coup', 'pop_corr_excl']
     })
 
-    sp.sample_sobol(2**3).evaluate(model_wrapper_barabasi).analyze_sobol()
-    df = sp.to_df()
-    df.to_csv('SA_results.csv')
+    sp.sample_sobol(1).evaluate(model_wrapper_barabasi).analyze_sobol()
