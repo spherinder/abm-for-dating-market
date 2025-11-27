@@ -239,7 +239,7 @@ def format_graph_edges(g: PyGraph, n: int):
     )
 
 
-# Return a tuple of (coupling, exclusion, convergence, pop)
+# Return a tuple of (coupling, exclusion, pop, convergence)
 def get_coupling_exclusion(
     sim: MutNetSimulation, a: int, t: float
 ) -> tuple[int, int, int, float]:
@@ -281,11 +281,11 @@ def get_coupling_exclusion(
 
 
 # Use this to get data of all agents to get info *AT that round*
-# Return list of (coupling, exclusion, pop)
+# Return list of (coupling, exclusion, pop, convergence)
 def get_agent_data(sim: MutNetSimulation, t: float) -> list[tuple[int, int, int]]:
     data = []
     for a in range(len(sim.males) + len(sim.fems)):
-        data.append(get_coupling_exclusion(sim, a, t)[:3])
+        data.append(get_coupling_exclusion(sim, a, t))
     return data
 
 
@@ -294,6 +294,14 @@ def get_correlation_exclusion_popularity(
 ) -> np.ndarray:
     data_np = np.array(data)
     exclusion_pop_array = data_np[:, [1, 2]]
+
+    return np.corrcoef(exclusion_pop_array, rowvar=False)
+
+def get_correlation_coupling_popularity(
+    data: list[tuple[int, int, int]],
+) -> np.ndarray:
+    data_np = np.array(data)
+    exclusion_pop_array = data_np[:, [0, 2]]
 
     return np.corrcoef(exclusion_pop_array, rowvar=False)
 
