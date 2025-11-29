@@ -38,29 +38,6 @@ class Agent:
         return cls(rng.integers(0, attr_max, (attr_dim,)), rng.uniform(0, attr_max, (attr_dim,)), rng)
 
 
-def pair_up(
-    males: Sequence[int], fems: Sequence[int], paths: AllPairsPathMapping, rngs: Rngs
-) -> Iterable[tuple[int, int]]:
-    num_m = len(males)
-    num_f = len(fems)
-    maleixs = list(range(num_m))
-    femixs = list(range(num_f))
-
-    if num_m > num_f:
-        maleixs = rngs[0].sample(maleixs, num_f)
-    elif num_m < num_f:
-        femixs = rngs[0].sample(femixs, num_m)
-    pathmaps = (paths[males[mi]] for mi in maleixs)
-    weights = np.array(
-        [
-            [(len(pathmap[fems[fi]]) if fems[fi] in pathmap else 0) for fi in femixs]
-            for pathmap in pathmaps
-        ]
-    )
-
-    perm = gumbel_weighted_permutation(weights, rngs[1])
-    return zip(maleixs, (femixs[int(i)] for i in perm))
-
 
 class MutNetSimulation:
     graph: PyGraph[int]
@@ -132,13 +109,49 @@ class MutNetSimulation:
         #     0, self.attr_max
         # )
 
-    def step_local(self, log: bool = False):
+    def pair_up(self) -> Iterable[tuple[int, int]]:
         paths = all_pairs_dijkstra_shortest_paths(self.graph, lambda _: 1)
         num_m = len(self.males)
-        pairs = pair_up(
-            range(num_m), range(num_m, num_m + len(self.fems)), paths, self.rngs
+        num_f = len(self.fems)
+        m_nodes = range(num_m)
+        f_nodes = range(num_m, num_m + num_f)
+        maleixs = list(range(num_m))
+        femixs = list(range(num_f))
+
+        if num_m > num_f:
+            maleixs = self.rngs[0].sample(maleixs, num_f)
+        elif num_m < num_f:
+            femixs = self.rngs[0].sample(femixs, num_m)
+        pathmaps = (paths[m_nodes[mi]] for mi in maleixs)
+        weights = np.array(
+            [
+                [(len(pathmap[f_nodes[fi]]) if f_nodes[fi] in pathmap else 0) for fi in femixs]
+                for pathmap in pathmaps
+            ]
         )
-        pairs = list(pairs)
+
+        perm = gumbel_weighted_permutation(weights, self.rngs[1])
+        return zip(maleixs, (femixs[int(i)] for i in perm))
+
+    def pair_up_fully_connected(self) -> Iterable[tuple[int,int]]:
+        rng = self.rngs[0]
+        num_m = len(self.males)
+        num_f = len(self.fems)
+        maleixs = list(range(num_m))
+        femixs = list(range(num_f))
+
+        if num_m > num_f:
+            maleixs = rng.sample(maleixs, num_f)
+        elif num_m < num_f:
+            femixs = rng.sample(femixs, num_m)
+
+        rng.shuffle(femixs)
+        return zip(maleixs, femixs)
+
+
+    def step_local(self, log: bool = False):
+        # pairs = self.pair_up()
+        pairs = self.pair_up_fully_connected()
         for mi, fi in pairs:
             a_m = self.males[mi]
             a_f = self.fems[fi]
