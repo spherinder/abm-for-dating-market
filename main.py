@@ -222,14 +222,14 @@ class MutNetSimulation:
                     self.graph.remove_edge(a, b)
                     break
 
-    @override
-    def __repr__(self) -> str:
-        males = "\n    ".join(f"{a}" for a in self.males)
-        fems = "\n    ".join(f"{a}" for a in self.fems)
-        return (
-            f"{self.__class__.__name__}(attr_max={self.attr_max}, malleability={self.malleability},"
-            f"\n  males=[\n    {males}\n  ],\n  females=[\n    {fems}\n  ]\n)"
-        )
+    # @override
+    # def __repr__(self) -> str:
+    #     males = "\n    ".join(f"{a}" for a in self.males)
+    #     fems = "\n    ".join(f"{a}" for a in self.fems)
+    #     return (
+    #         f"{self.__class__.__name__}(attr_max={self.attr_max}, malleability={self.malleability},"
+    #         f"\n  males=[\n    {males}\n  ],\n  females=[\n    {fems}\n  ]\n)"
+    #     )
 
 
 def format_graph_edges(g: PyGraph, n: int):

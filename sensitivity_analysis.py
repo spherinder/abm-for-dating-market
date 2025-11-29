@@ -8,9 +8,22 @@ from SALib import ProblemSpec
 from main import MutNetSimulation, \
     run_mut_net_sim, get_coupling_exclusion, get_correlation_exclusion_popularity, get_agent_data, get_correlation_coupling_popularity
 
-ATTR_THRESHOLD = 0.8
-SEED = 166
+ATTR_THRESHOLD = 0.9
 
+INPUTS = ['prop','density', 'malleability', 'noise', 'sim_sensitivity', 'T']
+OUTPUTS = [
+    'single_pair_nr', 
+    'any_pair_nr', 
+    'coupling_deg', 
+    'excluded_nr', 
+    'excluded_degree', 
+    'excluded_prop_m', 
+    'excluded_deg_m', 
+    'excluded_prop_f', 
+    'excluded_deg_f',
+    'conv', 
+    'pop_corr_coup', 
+    'pop_corr_excl']
 # sim = MutNetSimulation(
 #         num_m=N_m,
 #         num_f=N_f,
@@ -39,20 +52,19 @@ def run_model(
         noise,
         sim_sensitivity,
         graph_type,  # "uniform" or "barabasi"
-        T):
+        T,
+        seed = 166):
     
-
-
     sim = MutNetSimulation(
         num_m=num_m,
         num_f=num_f,
         density=density,
         malleability=malleability,
-        rng = Random(SEED),
+        rng = Random(seed),
         noise=noise,
         sim_sensitivity=sim_sensitivity,
         graph_type=graph_type,  # "uniform" or "barabasi"
-        attr_max=10,
+        attr_max=10
     )
     # get initial data
     initial_agent_data = get_agent_data(sim, ATTR_THRESHOLD)
@@ -66,7 +78,7 @@ def run_model(
     clean_final_data = get_rid_of_exclusion_for_couples(final_agent_data)
 
     # build the dataframe
-    df = turn_tuple_data_into_df(clean_final_data, clean_initial_data,  num_m, num_f)
+    df = turn_tuple_data_into_df(clean_final_data, clean_initial_data, num_m, num_f)
 
     # get metrics
     metrics = np.array(get_metrics(df))
@@ -104,14 +116,24 @@ def get_metrics(df):
     """
     single_pair_nr = sum(df['couple_deg'] == 1)
     any_pair_nr = sum(df['couple_deg'] > 0)
-    coupling_deg = df['couple_deg'].mean()
+    coupling_deg = df[df['couple_deg'] > 0]['couple_deg'].mean()
 
     excluded_nr = sum(df['excl_deg'] > 0)
-    excluded_degree = df['excl_deg'].mean()
+    excluded_degree = df[df['excl_deg'] > 0]['excl_deg'].mean()
+
+    # split male and female
+    df_m = df[df['gender'] == 'm']
+    df_f = df[df['gender'] == 'f']
+
+    excluded_prop_m = sum(df_m['excl_deg'] > 0)/len(df_m['excl_deg'])
+    excluded_deg_m = df_m[df_m['excl_deg'] > 0]['excl_deg'].mean()
+    excluded_prop_f = sum(df_f['excl_deg'] > 0)/len(df_f['excl_deg'])
+    excluded_deg_f = df_f[df_f['excl_deg'] > 0]['excl_deg'].mean()
+
 
     conv = (df['conv'] - df['conv_init']).mean()
 
-    return single_pair_nr, any_pair_nr, coupling_deg, excluded_nr, excluded_degree, conv
+    return single_pair_nr, any_pair_nr, coupling_deg, excluded_nr, excluded_degree, excluded_prop_m, excluded_deg_m, excluded_prop_f, excluded_deg_f, conv
 
 def model_wrapper_barabasi(X: np.array, func: Callable = run_model):
     """
@@ -120,7 +142,7 @@ def model_wrapper_barabasi(X: np.array, func: Callable = run_model):
     :param func: a function calling the model and returning results
     """
     N, D = X.shape
-    results = np.empty((N, 8))
+    results = np.empty((N, len(OUTPUTS)))
     for i in range(N):
         prop,  density, malleability, noise, sim_sensitivity, T = X[i, :]
 
@@ -144,17 +166,89 @@ def model_wrapper_uniform(X: np.array, func: Callable):
     return func(num_m, num_f, density, malleability, noise, sim_sensitivity, "uniform", T)
     
 
-def model_wrapper_fully_connected(X: np.array, func: Callable):
+def model_wrapper_fully_connected(X: np.array, func: Callable = run_model):
     """
     :param X: a numpy array in the form: 
         [prop,  malleability, noise, sim_sensitivity, T] 
     :param func: a function calling the model and returning results
     """
-    prop,  malleability, noise, sim_sensitivity, T = X.T
+    prop,  density, malleability, noise, sim_sensitivity, T = X.T
     num_f = 50
     num_m = prop*num_f
     
     return func(num_m, num_f, 1,  malleability, noise, sim_sensitivity, "uniform", T)
+
+def perform_main_sa(sobol_run_param, graph_type):
+    sp = ProblemSpec({
+        'names': INPUTS,
+        'bounds': [
+            [1, 4],  # prop
+            [0.05,1], # dens
+            [0.2,0.6], # mall
+            [0, 0.05],  # noise
+            [0.01, 1], # sim sensitivity
+            [20, 150] # T (is floored later!)
+        ],
+        'outputs': OUTPUTS
+    })
+    if graph_type == 'barabasi':
+        sp.sample_sobol(2**sobol_run_param).evaluate(model_wrapper_barabasi).analyze_sobol()
+    elif graph_type == 'full':
+        sp.sample_sobol(2**sobol_run_param).evaluate(model_wrapper_fully_connected).analyze_sobol()
+
+    with open("sa_new.pkl", "wb") as f:
+        pickle.dump(sp, f)
+
+    single_pair_nr, any_pair_nr, coupling_deg, excluded_nr, excluded_degree, excluded_prop_m, excluded_deg_m, excluded_prop_f, excluded_deg_f, conv, pop_corr_coup, pop_corr_excl = sp.to_df()
+    out_ls = [single_pair_nr, any_pair_nr, coupling_deg, excluded_nr, excluded_degree, excluded_prop_m, excluded_deg_m, excluded_prop_f, excluded_deg_f, conv, pop_corr_coup, pop_corr_excl]
+    for i in range(len(out_ls)):
+        dfs = out_ls[i]
+        total_Si, first_Si, second_Si = dfs
+        total_Si.to_csv(f'results\\{OUTPUTS[i]}_total_Si')
+        first_Si.to_csv(f'results\\{OUTPUTS[i]}_first_Si')
+        second_Si.to_csv(f'results\\{OUTPUTS[i]}_second_Si')
+
+    return sp
+
+def load_sp(path: str) -> ProblemSpec:
+    with open(path, 'rb') as f:
+        sp = pickle.load(f)
+    return sp
+    
+
+def run_purely_randomised_sa(sample_nr: int, graph_type):
+    ls = []
+    seeds = np.linspace(1, sample_nr, sample_nr).astype(int).tolist()
+    N_f = 50
+    N_m = 3* N_f
+    T = 100
+    if graph_type == 'barabasi':
+        density = 0.2
+    elif graph_type == 'full':
+        density = 1
+        graph_type = 'uniform'
+    noise = 0.01
+    malleability = 0.4
+    sim_sensitivity = 0.1
+    
+    for seed in seeds:
+        results = run_model(
+            num_m=N_m,
+            num_f=N_f,
+            density=density,
+            malleability=malleability,
+            noise=noise,
+            sim_sensitivity=sim_sensitivity,
+            graph_type=graph_type,
+            T=T,
+            seed=seed
+        )
+        ls.append(results)
+
+    out = pd.DataFrame(ls, columns=OUTPUTS)
+    out.to_csv(f'sa_randomised_{graph_type}.csv')
+    return out
+
 
 def tester():
     
@@ -178,18 +272,7 @@ def tester():
         T
     )
 
-def perform_sa():
-    sp = ProblemSpec({
-        'names': ['prop','density', 'malleability', 'noise', 'sim_sensitivity', 'T'],
-        'bounds': [
-            [1, 5],  # prop
-            [0,1], # dens
-            [0,1], # mall
-            [0, 0.003],  # noise
-            [0, 10], # sim sensitivity
-            [10, 100] # T (is floored later!)
-        ],
-        'outputs': ['single_pair_nr', 'any_pair_nr', 'coupling_deg', 'excluded_nr', 'excluded_degree', 'conv', 'pop_corr_coup', 'pop_corr_excl']
-    })
-
-    sp.sample_sobol(1).evaluate(model_wrapper_barabasi).analyze_sobol()
+run_purely_randomised_sa(100, "barabasi")
+sp = perform_main_sa(7, 'barabasi')
+# run_purely_randomised_sa(100, "full")
+# sp = perform_main_sa(8, 'full')
