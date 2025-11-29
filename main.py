@@ -43,7 +43,6 @@ class Agent:
         )
 
 
-
 class MutNetSimulation:
     graph: PyGraph[int]
     density: Final[float]
@@ -84,7 +83,9 @@ class MutNetSimulation:
             self.graph = undirected_gnp_random_graph(num_m + num_f, density, seed)
         elif graph_type == "barabasi":
             self.graph = barabasi_albert_graph(
-                num_m + num_f, floor((num_m + num_f) * density), seed
+                num_m + num_f,
+                floor((num_m + num_f - 1) * density),
+                seed,
             )
 
         self.males = [Agent.new(attr_dim, attr_max, self.rngs[1]) for _ in range(num_m)]
@@ -143,7 +144,10 @@ class MutNetSimulation:
         pathmaps = (paths[m_nodes[mi]] for mi in maleixs)
         weights = np.array(
             [
-                [(len(pathmap[f_nodes[fi]]) if f_nodes[fi] in pathmap else 0) for fi in femixs]
+                [
+                    (len(pathmap[f_nodes[fi]]) if f_nodes[fi] in pathmap else 0)
+                    for fi in femixs
+                ]
                 for pathmap in pathmaps
             ]
         )
@@ -151,7 +155,7 @@ class MutNetSimulation:
         perm = gumbel_weighted_permutation(weights, self.rngs[1])
         return zip(maleixs, (femixs[int(i)] for i in perm))
 
-    def pair_up_fully_connected(self) -> Iterable[tuple[int,int]]:
+    def pair_up_fully_connected(self) -> Iterable[tuple[int, int]]:
         rng = self.rngs[0]
         num_m = len(self.males)
         num_f = len(self.fems)
@@ -165,7 +169,6 @@ class MutNetSimulation:
 
         rng.shuffle(femixs)
         return zip(maleixs, femixs)
-
 
     def step_local(self, log: bool = False):
         num_a = len(self.males) + len(self.fems)
@@ -311,6 +314,7 @@ def get_correlation_exclusion_popularity(
 
     return np.corrcoef(exclusion_pop_array, rowvar=False)
 
+
 def get_correlation_coupling_popularity(
     data: list[tuple[int, int, int]],
 ) -> np.ndarray:
@@ -439,7 +443,7 @@ def main():
     sim_sensitivity = 0.1
     graph_type = "barabasi"
     # NOTE: indices go from males -> females --- offset females by N_m
-    N_m = 4
+    N_m = 6
     N_f = 2 * N_m
 
     # Creating social graph (underlying structure)
@@ -454,14 +458,15 @@ def main():
         graph_type=graph_type,  # "uniform" or "barabasi"
         attr_max=10,
     )
-    # run_mut_net_sim_viz(sim, T, live_view=False)
-    run_mut_net_sim(sim, T)
+    run_mut_net_sim_viz(sim, T, live_view=False)
+    # run_mut_net_sim(sim, T)
     print("Males attributes and soughts")
     for i in range(len(sim.males)):
         print(f"{i}: {sim.males[i]}")
     print("Females attributes and soughts")
     for i in range(len(sim.fems)):
         print(f"{i}: {sim.fems[i]}")
+
     """
         Data Collection Examples
 
